@@ -13,18 +13,9 @@ impl<T> CassetteVec<T> {
 		Default::default()
 	}
 
-	/// Gets the underlying container as a slice.
-	pub fn as_slice(&self) -> &[T] {
-		self.tape.as_slice()
-	}
-
-	/// Gets the underlying container as a mutable slice.
-	///
-	/// Depending on how `CassetteVec` is being used, editing the slice's contents may result in odd
-	/// behavior. For example, an undo-redo system may wish to prevent arbitrary editing of the
-	/// slice's contents, to ensure that undoing and redoing actions gives consistent results.
-	pub fn as_mut_slice(&mut self) -> &mut [T] {
-		self.tape.as_mut_slice()
+	pub fn clear(&mut self) {
+		self.tape.clear();
+		self.head = 0;
 	}
 }
 
@@ -80,12 +71,45 @@ impl<T> CassetteVec<T> {
 
 // Tape operations
 impl<T> CassetteVec<T> {
+	/// Gets the underlying container as a slice.
+	pub fn tape_as_slice(&self) -> &[T] {
+		self.tape.as_slice()
+	}
+
+	/// Gets the underlying container as a mutable slice.
+	///
+	/// Depending on how `CassetteVec` is being used, editing the slice's contents may result in odd
+	/// behavior. For example, an undo-redo system may wish to prevent arbitrary editing of the
+	/// slice's contents, to ensure that undoing and redoing actions gives consistent results.
+	pub fn tape_as_mut_slice(&mut self) -> &mut [T] {
+		self.tape.as_mut_slice()
+	}
+
+	pub fn tape_len(&self) -> usize {
+		self.tape.len()
+	}
+
 	pub fn get_item_at_head(&self) -> Option<&T> {
 		self.tape.get(self.head)
 	}
 
 	pub fn get_item_at_head_mut(&mut self) -> Option<&mut T> {
 		self.tape.get_mut(self.head)
+	}
+
+	pub fn push_to_end(&mut self, item: T) {
+		self.tape.push(item);
+	}
+
+	pub fn set_item_at_head(&mut self, item: T) {
+		self.tape.insert(self.head, item);
+	}
+
+	pub fn remove_item_at_head(&mut self) -> Option<T> {
+		match self.head {
+			i if i >= self.tape.len() => None,
+			_ => Some(self.tape.remove(self.head)),
+		}
 	}
 }
 
