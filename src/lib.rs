@@ -7,6 +7,11 @@ pub struct CassetteVec<Tape> {
 	/// An index representing a position into the tape. The exact meaning of this number is
 	/// dependant on the use-case, but generally this will point to the "beginning" of a cell -
 	/// usually of the cell that we want to process next.
+	///
+	/// The head is constrained to `0 <= head <= self.tape.len()`, except in cases where a user
+	/// calls `self.get_mut()`, changes the length to be less than the head, and forgets to clamp
+	/// the head back within the tape's bounds. However, such a thing is a logic error, and is on
+	/// the user of the struct to avoid.
 	head: usize,
 }
 
@@ -37,11 +42,15 @@ impl<Tape> CassetteVec<Tape> {
 
 	/// Gets a mutable reference to the underlying tape.
 	///
-	/// If the underlying tape's length is modified, you **must** ensure that the cassette head
-	/// position is within the bounds of the tape before the next read/write. Failure to do is a
-	/// logic error. The behavior resulting from such a logic error is not specified, but will be
-	/// encapsulated to the `CassetteVec` that observed the logic error and not result in undefined
-	/// behavior. This could include panics, incorrect results, and other such unwanted behavior.
+	/// # Warning
+	/// If the underlying tape's length is modified, you should ensure that the cassette head
+	/// position upholds `0 <= head_position <= tape_len` before the next attempt to read/write at
+	/// the head position.
+	///
+	/// Failure to do so is a logic error. The behavior resulting from such a logic error is not
+	/// specified, but will be encapsulated to the `CassetteVec` that observed the logic error and
+	/// not result in undefined behavior. This could include panics, incorrect results, and other
+	/// such unwanted behavior.
 	pub fn get_mut(&mut self) -> &mut Tape {
 		&mut self.tape
 	}
@@ -68,11 +77,17 @@ impl<Tape: TapeLike> CassetteVec<Tape> {
 			.inspect(|&new_pos| self.head = new_pos)
 	}
 
+	pub fn clamp_head_to_tape_bounds(&mut self) {
+		// `usize`, by its nature, cannot be below `0`. Thus, we only need to know which is the
+		// smaller value: the tape length, or the head position
+		self.head = self.head.max(self.tape.len());
+	}
+
 	pub fn seek_to_start(&mut self) {
 		self.head = 0;
 	}
 
-	pub fn move_backwards(&mut self) -> bool {
+	pub fn seek_backward_one(&mut self) -> bool {
 		self.seek_relative(-1).is_some()
 	}
 
@@ -81,7 +96,7 @@ impl<Tape: TapeLike> CassetteVec<Tape> {
 		self.seek(SeekFrom::Current(offset))
 	}
 
-	pub fn move_forward(&mut self) -> bool {
+	pub fn seek_forward_one(&mut self) -> bool {
 		self.seek_relative(1).is_some()
 	}
 
@@ -120,15 +135,9 @@ impl<Tape: TapeLikeMut> CassetteVec<Tape> {
 		self.tape.set_item(self.head, item);
 	}
 
-	// TODO: Should this be added back the same, or should it be replaced by a "truncate" function?
-	/*
 	pub fn remove_item_at_head(&mut self) -> Option<Tape::Item> {
-		match self.head {
-			i if i >= self.tape.len() => None,
-			_ => Some(self.tape.remove(self.head)),
-		}
+		self.tape.remove_item(self.head)
 	}
-	*/
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -174,5 +183,6 @@ pub trait TapeLike {
 pub trait TapeLikeMut: TapeLike {
 	fn get_item_mut(&mut self, index: usize) -> Option<&mut Self::Item>;
 	fn set_item(&mut self, index: usize, item: Self::Item);
+	fn remove_item(&mut self, index: usize) -> Option<Self::Item>;
 	fn clear(&mut self);
 }

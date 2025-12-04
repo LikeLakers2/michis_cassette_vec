@@ -25,6 +25,10 @@ impl<T> TapeLikeMut for Vec<T> {
 		self.insert(index, item);
 	}
 
+	fn remove_item(&mut self, index: usize) -> Option<Self::Item> {
+		(index < self.len()).then(|| self.remove(index))
+	}
+
 	fn clear(&mut self) {
 		self.clear();
 	}
@@ -49,6 +53,10 @@ impl<T> TapeLikeMut for VecDeque<T> {
 
 	fn set_item(&mut self, index: usize, item: Self::Item) {
 		self.insert(index, item);
+	}
+
+	fn remove_item(&mut self, index: usize) -> Option<Self::Item> {
+		self.remove(index)
 	}
 
 	fn clear(&mut self) {
