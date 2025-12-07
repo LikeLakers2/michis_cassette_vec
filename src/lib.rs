@@ -1,3 +1,5 @@
+#![no_std]
+
 mod indexable_collection_impls;
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]

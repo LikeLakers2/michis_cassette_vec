@@ -1,6 +1,9 @@
 extern crate alloc;
 
-use alloc::collections::VecDeque;
+use alloc::{
+	collections::VecDeque,
+	vec::Vec,
+};
 
 use crate::{IndexableCollection, IndexableCollectionMut};
 
