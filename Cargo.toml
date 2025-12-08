@@ -14,6 +14,7 @@ categories = ["data-structures"]
 [dependencies]
 arrayvec = { version = "0.7", optional = true, default-features = false }
 smallvec = { version = "1", optional = true, default-features = false }
+serde = { version = "1", optional = true, default-features = false, features = ["derive"] }
 
 [features]
 default = ["alloc"]
@@ -23,6 +24,8 @@ alloc = []
 arrayvec = ["dep:arrayvec"]
 # Adds trait implementations for the `smallvec@1` crate
 smallvec = ["dep:smallvec"]
+# Adds (de)serialization support to the crate
+serde = ["dep:serde"]
 
 [lints]
 clippy.allow_attributes_without_reason = "forbid"

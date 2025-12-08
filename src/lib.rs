@@ -3,6 +3,7 @@
 mod trait_impls_by_crate;
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CollectionCursor<Tape> {
 	/// The underlying collection that the cursor will point into.
 	inner: Tape,
@@ -145,6 +146,7 @@ impl<Tape: IndexableCollectionMut> CollectionCursor<Tape> {
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SeekFrom {
 	/// Moves the cursor to the provided index.
 	///
