@@ -20,8 +20,8 @@ macro_rules! forward_mut {
 			self.get_mut(index)
 		}
 
-		fn set_item(&mut self, index: usize, item: Self::Item) {
-			self.insert(index, item);
+		fn set_item(&mut self, index: usize, element: Self::Item) {
+			self.insert(index, element);
 		}
 
 		fn clear(&mut self) {
@@ -40,9 +40,9 @@ macro_rules! forward_mut {
 	};
 }
 
-/// Checks that the `forward_ref!()` and `forward_mut!()` macros provide consistent results.
+/// Tests against `forward_ref!()` and `forward_mut!()`
 #[cfg(test)]
-mod forward_macro_consistency_tests {
+mod forward_macro_tests {
 	extern crate alloc;
 	use core::ops::{Deref, DerefMut};
 
@@ -51,6 +51,7 @@ mod forward_macro_consistency_tests {
 	use crate::{IndexableCollection, IndexableCollectionMut};
 
 	/// Returns `None` on a bad remove
+	#[derive(Default)]
 	struct TestVec(Vec<i32>);
 
 	impl TestVec {
@@ -79,6 +80,12 @@ mod forward_macro_consistency_tests {
 		}
 	}
 
+	impl From<Vec<i32>> for TestVec {
+		fn from(value: Vec<i32>) -> Self {
+			Self(value)
+		}
+	}
+
 	impl IndexableCollection for TestVec {
 		type Item = i32;
 		forward_ref!();
@@ -90,6 +97,7 @@ mod forward_macro_consistency_tests {
 
 	/// Wrapper around `TestVec` to make it panic on a bad remove, so we can test the macro's "check
 	/// len" functionality
+	#[derive(Default)]
 	struct PanicVec(TestVec);
 
 	impl PanicVec {
@@ -127,6 +135,12 @@ mod forward_macro_consistency_tests {
 		}
 	}
 
+	impl From<Vec<i32>> for PanicVec {
+		fn from(value: Vec<i32>) -> Self {
+			Self(value.into())
+		}
+	}
+
 	impl IndexableCollection for PanicVec {
 		type Item = i32;
 		forward_ref!();
@@ -140,53 +154,135 @@ mod forward_macro_consistency_tests {
 	/// collection.
 	#[test]
 	fn len_consistency() {
-		let inputs: Vec<Vec<i32>> = [[].into(), [0].into(), [1, 2].into(), [3, 4, 5].into()].into();
+		let inputs: [Vec<i32>; _] = [[].into(), [0].into(), [1, 2].into(), [3, 4, 5].into()];
+
 		inputs.into_iter().for_each(|input| {
 			let collection = TestVec(input);
 			let collection_defined_len = collection.len();
 			let trait_defined_len = IndexableCollection::len(&collection);
 
-			assert_eq!(trait_defined_len, collection_defined_len);
+			assert_eq!(
+				trait_defined_len, collection_defined_len,
+				"the length returned by the trait was not the same as the length returned by the inner collection"
+			);
 		});
 	}
 
-	/// Ensure that we receive the same items from the inner collection as from the trait.
 	#[test]
 	fn get_item_consistency() {
 		let input = Vec::from([1, 2, 3]);
 
-		let collection = TestVec(Vec::from_iter(input.clone()));
-		input.iter().enumerate().for_each(|(index, _)| {
-			let collection_defined_get = collection.get(index);
-			let trait_defined_get = IndexableCollection::get_item(&collection, index);
+		let regular_vec = Vec::from_iter(input.clone());
+		let test_vec = TestVec(regular_vec.clone());
 
-			assert_eq!(trait_defined_get, collection_defined_get);
-		});
+		// We deliberately request one item past the end, to test if that is also the same
+		for index in 0..=(input.len()) {
+			let reg_res = regular_vec.get(index);
+			let test_res = IndexableCollection::get_item(&test_vec, index);
 
-		// Also test that we get the same item if we go past the end
-		let collection_get_after_end = collection.get(input.len());
-		let trait_get_after_end = IndexableCollection::get_item(&collection, input.len());
-		assert_eq!(trait_get_after_end, collection_get_after_end);
+			assert_eq!(
+				reg_res, test_res,
+				"the item returned by the trait was not the same as the item returned by the inner collection"
+			);
+		}
 	}
 
 	#[test]
 	fn get_item_mut_consistency() {
-		let mut input = Vec::from([1, 2, 3]);
+		let input = Vec::from([1, 2, 3]);
 
-		let mut collection = TestVec(Vec::from_iter(input.clone()));
-		input.iter_mut().enumerate().for_each(|(index, _)| {
-			let collection_defined_get = collection.get_mut(index).cloned();
-			let trait_defined_get =
-				IndexableCollectionMut::get_item_mut(&mut collection, index).cloned();
+		let mut regular_vec = Vec::from_iter(input.clone());
+		let mut test_vec = TestVec(regular_vec.clone());
 
-			assert_eq!(trait_defined_get, collection_defined_get);
+		// We deliberately request one item past the end, to test if that is also the same
+		for index in 0..=(input.len()) {
+			let reg_res = regular_vec.get_mut(index);
+			let test_res = IndexableCollectionMut::get_item_mut(&mut test_vec, index);
+
+			assert_eq!(
+				reg_res, test_res,
+				"the mutable item returned by the trait was not the same as the mutable item returned by the inner collection"
+			);
+		}
+	}
+
+	#[test]
+	fn set_item_consistency() {
+		let inputs: [(usize, i32); _] = [(0, 2), (2, 4), (5, 6)];
+
+		let mut regular_vec = Vec::from_iter([0, 5, 10]);
+		let mut test_vec = TestVec(regular_vec.clone());
+
+		inputs.into_iter().for_each(|(index, element)| {
+			regular_vec.insert(index, element);
+			IndexableCollectionMut::set_item(&mut test_vec, index, element);
+			assert_eq!(
+				test_vec.0, regular_vec,
+				"inserting an item didn't result in an identical collection"
+			);
 		});
+	}
+	mod remove_item {
+		use super::*;
 
-		// Also test that we get the same item if we go past the end
-		let collection_get_after_end = collection.get_mut(input.len()).cloned();
-		let trait_get_after_end =
-			IndexableCollectionMut::get_item_mut(&mut collection, input.len()).cloned();
-		assert_eq!(trait_get_after_end, collection_get_after_end);
+		macro_rules! make_test {
+			($s:tt, $path_to_inner:tt) => {
+				let inputs: [usize; _] = [5, 2, 0];
+
+				let mut regular_vec = Vec::from_iter([2, 0, 4, 5, 10, 6]);
+				let mut test_vec = $s::from(regular_vec.clone());
+
+				// Test that `IndexableCollectionMut::remove_item()` removes and returns the same
+				// items as removing them directly from the collection.
+				inputs.into_iter().for_each(|index| {
+					let reg_res = regular_vec.remove(index);
+					let test_res = IndexableCollectionMut::remove_item(&mut test_vec, index);
+					assert_eq!(Some(reg_res), test_res, "the returned item wasn't the same");
+					assert_eq!(
+						test_vec.$path_to_inner, regular_vec,
+						"the collections weren't modified in the same way"
+					);
+				});
+
+				// Test that attempting to remove past the end will return `None` - and importantly,
+				// not panic!
+				let index_past_the_end = test_vec.$path_to_inner.len();
+				let test_res =
+					IndexableCollectionMut::remove_item(&mut test_vec, index_past_the_end);
+				assert_eq!(
+					test_res, None,
+					"removing an item past the end did not return `None`"
+				);
+			};
+		}
+
+		#[test]
+		fn without_check_len() {
+			make_test!(TestVec, 0);
+		}
+
+		#[test]
+		fn with_check_len() {
+			make_test!(PanicVec, 0.0);
+		}
+	}
+
+	#[test]
+	fn clear_consistency() {
+		let mut regular_vec = Vec::from_iter([2, 0, 4, 5, 10, 6]);
+		let mut test_vec = TestVec(regular_vec.clone());
+
+		assert_eq!(
+			test_vec.0, regular_vec,
+			"the regular and test items weren't the same"
+		);
+
+		regular_vec.clear();
+		IndexableCollectionMut::clear(&mut test_vec);
+		assert_eq!(
+			test_vec.0, regular_vec,
+			"clearing the vecs did not result in the same list of items"
+		);
 	}
 }
 

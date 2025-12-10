@@ -197,7 +197,7 @@ pub trait IndexableCollectionMut: IndexableCollection {
 	/// Returns `None` if no item exists at `index`.
 	fn get_item_mut(&mut self, index: usize) -> Option<&mut Self::Item>;
 	/// Sets an item at a specific index.
-	fn set_item(&mut self, index: usize, item: Self::Item);
+	fn set_item(&mut self, index: usize, element: Self::Item);
 	/// Removes the item at index `index` from the container, and returns the item.
 	///
 	/// Returns `None` if no item exists at index `index`.
