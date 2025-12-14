@@ -89,7 +89,7 @@ impl<Tape: IndexableCollection> CollectionCursor<Tape> {
 	pub fn clamp_to_collection_bounds(&mut self) {
 		// `usize`, by its nature, cannot be below `0`. Thus, we only need to know which is the
 		// smaller value: the collection length, or the head position
-		self.pos = self.pos.max(self.inner.len());
+		self.pos = self.pos.min(self.inner.len());
 	}
 
 	pub fn seek_to_start(&mut self) {
@@ -204,4 +204,148 @@ pub trait IndexableCollectionMut: IndexableCollection {
 	fn remove_item(&mut self, index: usize) -> Option<Self::Item>;
 	/// Clears the container's contents.
 	fn clear(&mut self);
+}
+
+#[cfg(test)]
+mod collection_cursor_tests {
+	extern crate alloc;
+
+	use super::*;
+	use alloc::vec::Vec;
+
+	fn test_vec() -> Vec<i32> {
+		let res = Vec::from([0, 1, 2, 3, 4, 5, 9, 8, 7, 6]);
+
+		// Ensure that the length is a known value.
+		// IF YOU CHANGE THIS, ENSURE TESTS ARE CHANGED TO MATCH.
+		assert_eq!(res.len(), 10);
+
+		res
+	}
+
+	fn test_collection() -> CollectionCursor<Vec<i32>> {
+		let res = CollectionCursor {
+			inner: self::test_vec(),
+			pos: Default::default(),
+		};
+
+		// Ensure that the cursor position is a known value.
+		// IF YOU CHANGE THIS, ENSURE TESTS ARE CHANGED TO MATCH.
+		assert_eq!(res.pos, Default::default());
+
+		res
+	}
+
+	#[test]
+	fn new() {
+		let new_collection = CollectionCursor::new(self::test_vec());
+		let test_collection = self::test_collection();
+
+		assert_eq!(new_collection, test_collection);
+	}
+
+	#[test]
+	fn position() {
+		let mut collection = self::test_collection();
+		assert_eq!(collection.position(), 0);
+
+		collection.pos = 5;
+		assert_eq!(collection.position(), 5);
+
+		collection.pos = usize::MAX;
+		assert_eq!(collection.position(), usize::MAX);
+	}
+
+	#[test]
+	fn get_ref() {
+		let collection = self::test_collection();
+		assert_eq!(collection.get_ref(), &self::test_vec());
+	}
+
+	#[test]
+	fn get_mut() {
+		let mut collection = self::test_collection();
+		assert_eq!(collection.get_mut(), &mut self::test_vec());
+	}
+
+	#[test]
+	fn into_inner() {
+		let collection = self::test_collection();
+		assert_eq!(collection.into_inner(), self::test_vec());
+	}
+
+	#[test]
+	fn seek() {
+		fn inner(
+			collection: &mut CollectionCursor<Vec<i32>>,
+			seek_from: SeekFrom,
+			expected_result: Option<usize>,
+			expected_pos: usize,
+		) {
+			let new_pos = collection.seek(seek_from);
+			assert_eq!(
+				new_pos, expected_result,
+				"the seek did not return the expected value"
+			);
+			assert_eq!(
+				collection.pos, expected_pos,
+				"the seek did not place the cursor at the expected position"
+			);
+		}
+		let mut collection = self::test_collection();
+
+		let past_end_usize: usize = test_collection().inner.len() * 2;
+		let past_end_isize: isize = past_end_usize as isize;
+		let before_beginning: isize = -past_end_isize;
+
+		// Seeking to within valid bounds should return the `Some(the new position)` and move the
+		// cursor
+		inner(&mut collection, SeekFrom::Start(3), Some(3), 3);
+		inner(&mut collection, SeekFrom::Start(0), Some(0), 0);
+
+		inner(&mut collection, SeekFrom::Current(0), Some(0), 0);
+		inner(&mut collection, SeekFrom::Current(7), Some(7), 7);
+		inner(&mut collection, SeekFrom::Current(-2), Some(5), 5);
+		inner(&mut collection, SeekFrom::Current(-5), Some(0), 0);
+
+		inner(&mut collection, SeekFrom::End(0), Some(10), 10);
+		inner(&mut collection, SeekFrom::End(-1), Some(9), 9);
+		inner(&mut collection, SeekFrom::End(-5), Some(5), 5);
+		inner(&mut collection, SeekFrom::End(-10), Some(0), 0);
+
+		// Seek to a known position. We reuse the testing function to ensure we're actually there,
+		// just in case the test data has been messed with improperly.
+		inner(&mut collection, SeekFrom::Start(7), Some(7), 7);
+
+		// Seeking outside valid bounds should return `None` and *not* move the cursor
+		inner(&mut collection, SeekFrom::Start(past_end_usize), None, 7);
+
+		inner(
+			&mut collection,
+			SeekFrom::Current(before_beginning),
+			None,
+			7,
+		);
+		inner(&mut collection, SeekFrom::Current(past_end_isize), None, 7);
+
+		inner(&mut collection, SeekFrom::End(1), None, 7);
+		inner(&mut collection, SeekFrom::End(before_beginning), None, 7);
+		inner(&mut collection, SeekFrom::End(past_end_isize), None, 7);
+	}
+
+	#[test]
+	fn clamp_to_collection_bounds() {
+		// Create a messed up collection, and test clamping
+		let mut collection = self::test_collection();
+		collection.pos = usize::MAX;
+		assert!(collection.pos > collection.inner.len());
+
+		collection.clamp_to_collection_bounds();
+		assert_eq!(collection.pos, collection.inner.len());
+
+		// Create a normal collection, and test that clamping does nothing
+		collection.pos = 2;
+		collection.clamp_to_collection_bounds();
+		assert_eq!(collection.pos, 2);
+	}
 }
