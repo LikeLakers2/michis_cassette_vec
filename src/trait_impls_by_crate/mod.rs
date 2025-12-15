@@ -21,6 +21,10 @@ macro_rules! forward_mut {
 		}
 
 		fn set_item(&mut self, index: usize, element: Self::Item) {
+			self[index] = element;
+		}
+
+		fn insert_item(&mut self, index: usize, element: Self::Item) {
 			self.insert(index, element);
 		}
 
@@ -44,7 +48,7 @@ macro_rules! forward_mut {
 #[cfg(test)]
 mod forward_macro_tests {
 	extern crate alloc;
-	use core::ops::{Deref, DerefMut};
+	use core::ops::{Deref, DerefMut, Index, IndexMut};
 
 	use alloc::vec::Vec;
 
@@ -77,6 +81,20 @@ mod forward_macro_tests {
 
 		pub fn clear(&mut self) {
 			self.0.clear();
+		}
+	}
+
+	impl Index<usize> for TestVec {
+		type Output = i32;
+
+		fn index(&self, index: usize) -> &Self::Output {
+			self.0.index(index)
+		}
+	}
+
+	impl IndexMut<usize> for TestVec {
+		fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+			self.0.index_mut(index)
 		}
 	}
 
@@ -208,6 +226,31 @@ mod forward_macro_tests {
 
 	#[test]
 	fn set_item_consistency() {
+		let inputs: [(usize, i32); _] = [(0, 2), (1, 4), (2, 6)];
+
+		let mut regular_vec = Vec::from_iter([0, 5, 10]);
+		let mut test_vec = TestVec(regular_vec.clone());
+
+		inputs.into_iter().for_each(|(index, element)| {
+			regular_vec[index] = element;
+			IndexableCollectionMut::set_item(&mut test_vec, index, element);
+			assert_eq!(
+				test_vec.0, regular_vec,
+				"setting an item didn't result in an identical collection"
+			);
+		});
+	}
+
+	#[test]
+	#[should_panic = "index out of bounds: the len is 3 but the index is 3"]
+	fn set_item_panic_out_of_bounds_consistency() {
+		let regular_vec = Vec::from_iter([0, 5, 10]);
+		let mut test_vec = TestVec(regular_vec.clone());
+		IndexableCollectionMut::set_item(&mut test_vec, 3, 6);
+	}
+
+	#[test]
+	fn insert_item_consistency() {
 		let inputs: [(usize, i32); _] = [(0, 2), (2, 4), (5, 6)];
 
 		let mut regular_vec = Vec::from_iter([0, 5, 10]);
@@ -215,13 +258,14 @@ mod forward_macro_tests {
 
 		inputs.into_iter().for_each(|(index, element)| {
 			regular_vec.insert(index, element);
-			IndexableCollectionMut::set_item(&mut test_vec, index, element);
+			IndexableCollectionMut::insert_item(&mut test_vec, index, element);
 			assert_eq!(
 				test_vec.0, regular_vec,
 				"inserting an item didn't result in an identical collection"
 			);
 		});
 	}
+
 	mod remove_item {
 		use super::*;
 

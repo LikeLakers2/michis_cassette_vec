@@ -140,6 +140,10 @@ impl<Tape: IndexableCollectionMut> CollectionCursor<Tape> {
 		self.inner.set_item(self.pos, item);
 	}
 
+	pub fn insert_item_at_head(&mut self, item: Tape::Item) {
+		self.inner.insert_item(self.pos, item);
+	}
+
 	pub fn remove_item_at_head(&mut self) -> Option<Tape::Item> {
 		self.inner.remove_item(self.pos)
 	}
@@ -198,6 +202,9 @@ pub trait IndexableCollectionMut: IndexableCollection {
 	fn get_item_mut(&mut self, index: usize) -> Option<&mut Self::Item>;
 	/// Sets an item at a specific index.
 	fn set_item(&mut self, index: usize, element: Self::Item);
+	/// Inserts an item at a specific index, moving the item at the index and all items after it
+	/// one index forward.
+	fn insert_item(&mut self, index: usize, element: Self::Item);
 	/// Removes the item at index `index` from the container, and returns the item.
 	///
 	/// Returns `None` if no item exists at index `index`.
@@ -678,5 +685,118 @@ mod collection_cursor_tests {
 		// seek_to_end should ALWAYS succeed
 		inner(&mut collection, 5);
 		inner(&mut collection, usize::MAX);
+	}
+
+	#[test]
+	fn get_item_at_head() {
+		let test_vec = self::test_vec();
+		let mut collection = self::test_collection();
+
+		// We deliberately request one item past the end, to test if that's also the same
+		for i in 0..=(test_vec.len()) {
+			collection.pos = i;
+			let test_vec_get = test_vec.get(i);
+			let collection_get = collection.get_item_at_head();
+
+			assert_eq!(
+				test_vec_get, collection_get,
+				"should get the same item from the same index (index = `{i}`)"
+			);
+		}
+	}
+
+	#[test]
+	fn clear() {
+		let mut test_vec = self::test_vec();
+		let mut collection = self::test_collection();
+
+		test_vec.clear();
+		collection.clear();
+
+		assert_eq!(collection.inner, test_vec);
+	}
+
+	#[test]
+	fn get_item_at_head_mut() {
+		let mut test_vec = self::test_vec();
+		let mut collection = self::test_collection();
+
+		// We deliberately request one item past the end, to test if that's also the same
+		for i in 0..=(test_vec.len()) {
+			collection.pos = i;
+			let test_vec_get = test_vec.get_mut(i);
+			let collection_get = collection.get_item_at_head_mut();
+
+			assert_eq!(
+				test_vec_get, collection_get,
+				"should get the same item from the same index (index = `{i}`)"
+			);
+		}
+	}
+
+	#[test]
+	fn set_item_at_head() {
+		const AT_POS: usize = 5;
+		const TO_VALUE: i32 = 52345;
+
+		let mut test_vec = self::test_vec();
+		let mut collection = self::test_collection();
+
+		test_vec[AT_POS] = TO_VALUE;
+		collection.pos = AT_POS;
+		collection.set_item_at_head(TO_VALUE);
+
+		assert_eq!(
+			collection.inner.get(AT_POS),
+			Some(&TO_VALUE),
+			"should modify the inner collection to have the correct value at the head"
+		);
+		assert_eq!(collection.inner, test_vec, "should modify only one value");
+	}
+
+	#[test]
+	fn insert_item_at_head() {
+		const AT_POS: usize = 5;
+		const TO_VALUE: i32 = 52345;
+
+		let mut test_vec = self::test_vec();
+		let mut collection = self::test_collection();
+
+		test_vec.insert(AT_POS, TO_VALUE);
+		collection.pos = AT_POS;
+		collection.insert_item_at_head(TO_VALUE);
+
+		assert_eq!(
+			collection.inner.get(AT_POS),
+			Some(&TO_VALUE),
+			"should modify the inner collection to have the correct value at the head"
+		);
+		assert_eq!(collection.inner, test_vec, "should add only one value");
+	}
+
+	#[test]
+	fn remove_item_at_head() {
+		const AT_POS: usize = 5;
+
+		let mut test_vec = self::test_vec();
+		let mut collection = self::test_collection();
+
+		let test_vec_res = test_vec.remove(5);
+		collection.pos = AT_POS;
+		let collection_res = collection.remove_item_at_head();
+		assert_eq!(
+			collection_res,
+			Some(test_vec_res),
+			"should return the right value"
+		);
+		assert_eq!(collection.inner, test_vec, "should remove only one value");
+
+		// Additionally, test that this does NOT panic when out-of-bounds
+		collection.pos = collection.inner.len() * 2;
+		let collection_res = collection.remove_item_at_head();
+		assert_eq!(
+			collection_res, None,
+			"should return `None` if the head was out-of-bounds"
+		);
 	}
 }
