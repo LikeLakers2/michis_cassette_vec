@@ -64,6 +64,10 @@ impl<Tape> CollectionCursor<Tape> {
 
 // Cursor operations
 impl<Tape: IndexableCollection> CollectionCursor<Tape> {
+	pub fn is_cursor_at_end(&self) -> bool {
+		self.pos == self.inner.len()
+	}
+
 	/// Moves the cursor to a new index.
 	///
 	/// It is an error to seek to a position before `0` or after `self.get_ref().len()`. In these
@@ -179,8 +183,8 @@ impl<Tape: IndexableCollectionMut> CollectionCursor<Tape> {
 	/// Sets the slot at the cursor to `item`.
 	///
 	/// # Panics
-	/// Panics if `self.position() >= self.get_ref().len()` (yes, even if it's one past the end of
-	/// the collection).
+	/// Panics if the insert operation panics. The circumstances for a panic are defined by the
+	/// inner collection, but will usually occur if `self.position() >= self.get_ref().len()`.
 	pub fn set_item_at_cursor(&mut self, item: Tape::Item) {
 		self.inner.set_item(self.pos, item);
 	}
@@ -188,16 +192,34 @@ impl<Tape: IndexableCollectionMut> CollectionCursor<Tape> {
 	/// Inserts `item` at the cursor, shifting the following elements to the right by one index.
 	///
 	/// # Panics
-	/// Panics if `self.position() > self.get_ref().len()`, or if inserting into the inner
-	/// collection panics.
+	/// Panics if the insert operation panics. The circumstances for a panic are defined by the
+	/// inner collection, but will usually occur if `self.position() > self.get_ref().len()`.
 	pub fn insert_item_at_cursor(&mut self, item: Tape::Item) {
 		self.inner.insert_item(self.pos, item);
 	}
 
+	/// If `self.position() == self.get_ref().len()`, then insert `item` at the cursor. Otherwise,
+	/// set the slot at the cursor to `item`.
+	///
+	/// This is equivalent to [`Self::set_item_at_cursor`], except when
+	/// `self.position() == self.get_ref().len()`, then it's equivalent to
+	/// [`Self::insert_item_at_cursor`].
+	///
+	/// # Panics
+	/// Panics if the set/insert operation panics. The circumstances for a panic are defined by the
+	/// inner collection, but will usually occur if `self.position() > self.get_ref().len()`.
+	pub fn set_or_insert_item_at_cursor(&mut self, item: Tape::Item) {
+		if self.is_cursor_at_end() {
+			self.insert_item_at_cursor(item);
+		} else {
+			self.set_item_at_cursor(item);
+		}
+	}
+
 	/// Removes and returns the item at the cursor.
 	///
-	/// Returns `None` if `self.position() >= self.get_ref().len()`, or if removing from the inner
-	/// collection would normally panic.
+	/// Returns `None` if `self.position() >= self.get_ref().len()`, or if the remove operation
+	/// would normally panic.
 	pub fn remove_item_at_cursor(&mut self) -> Option<Tape::Item> {
 		// Note: We don't have to worry about moving the cursor. If the cursor is on the last item,
 		// removing will put it one index past the end, which is still within the valid area for the
@@ -256,14 +278,16 @@ pub trait IndexableCollectionMut: IndexableCollection {
 	fn get_item_mut(&mut self, index: usize) -> Option<&mut Self::Item>;
 	/// Sets an item at a specific index.
 	///
-	/// # Panics
-	/// Panics if `index >= self.get_ref().len()`.
+	/// This is allowed (and generally expected) to panic if `index >= self.len()`. However, if it
+	/// doesn't, then ensure you are following the "rule of least surprise" - whether through
+	/// documentation or otherwise.
 	fn set_item(&mut self, index: usize, element: Self::Item);
 	/// Inserts an item at a specific index, moving the item at the index and all items after it
 	/// one index forward.
 	///
-	/// # Panics
-	/// Panics if `index > self.len()`, or if the collection would normally panic upon an insert.
+	/// This is allowed (and generally expected) to panic if `index > self.len()`. However, if it
+	/// doesn't, then ensure you are following the "rule of least surprise" - whether through
+	/// documentation or otherwise.
 	fn insert_item(&mut self, index: usize, element: Self::Item);
 	/// Removes the item at index `index` from the container, and returns the item, or `None` if no
 	/// item exists at index `index`.
@@ -851,13 +875,9 @@ mod collection_cursor_tests {
 		}
 	}
 
-	#[test]
-	fn set_item_at_cursor() {
+	fn set_item_inner(mut collection: TestCollection, mut test_vec: TestVec) {
 		const AT_POS: usize = 5;
 		const TO_VALUE: i32 = 52345;
-
-		let mut test_vec = self::test_vec();
-		let mut collection = self::test_collection();
 
 		test_vec[AT_POS] = TO_VALUE;
 		collection.pos = AT_POS;
@@ -868,16 +888,20 @@ mod collection_cursor_tests {
 			Some(&TO_VALUE),
 			"should modify the inner collection to have the correct value at the head"
 		);
-		assert_eq!(collection.inner, test_vec, "should modify only one value");
+		assert_eq!(collection.inner, test_vec, "should set only one value");
 	}
 
 	#[test]
-	fn insert_item_at_cursor() {
+	fn set_item_at_cursor() {
+		let test_vec = self::test_vec();
+		let collection = self::test_collection();
+
+		self::set_item_inner(collection, test_vec);
+	}
+
+	fn insert_item_inner(mut collection: TestCollection, mut test_vec: TestVec) {
 		const AT_POS: usize = 5;
 		const TO_VALUE: i32 = 52345;
-
-		let mut test_vec = self::test_vec();
-		let mut collection = self::test_collection();
 
 		test_vec.insert(AT_POS, TO_VALUE);
 		collection.pos = AT_POS;
@@ -888,7 +912,24 @@ mod collection_cursor_tests {
 			Some(&TO_VALUE),
 			"should modify the inner collection to have the correct value at the head"
 		);
-		assert_eq!(collection.inner, test_vec, "should add only one value");
+		assert_eq!(collection.inner, test_vec, "should insert only one value");
+	}
+
+	#[test]
+	fn insert_item_at_cursor() {
+		let test_vec = self::test_vec();
+		let collection = self::test_collection();
+
+		self::insert_item_inner(collection, test_vec);
+	}
+
+	#[test]
+	fn set_or_insert_item_at_cursor() {
+		let test_vec = self::test_vec();
+		let collection = self::test_collection();
+
+		self::set_item_inner(collection.clone(), test_vec.clone());
+		self::insert_item_inner(collection.clone(), test_vec.clone());
 	}
 
 	#[test]
