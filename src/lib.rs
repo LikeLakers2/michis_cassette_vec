@@ -45,14 +45,14 @@ impl<Tape> CollectionCursor<Tape> {
 	/// Gets a mutable reference to the underlying collection.
 	///
 	/// # Warning
-	/// If the underlying collection's length is modified, you should ensure that
+	/// If the underlying collection's length is modified, you must ensure that
 	/// `0 <= self.position() <= self.get_ref().len()` is upheld before the next attempt to
 	/// read/write at the cursor.
 	///
 	/// Failure to do so is a logic error. The behavior resulting from such a logic error is not
-	/// specified, but will be encapsulated to the `CollectionCursor` that observed the logic error and
-	/// not result in undefined behavior. This could include panics, incorrect results, and other
-	/// such unwanted behavior.
+	/// specified, but will be encapsulated to the `CollectionCursor` that observed the logic error
+	/// and not result in undefined behavior. This could include panics, incorrect results, and
+	/// other such unwanted behavior.
 	pub fn get_mut(&mut self) -> &mut Tape {
 		&mut self.inner
 	}
@@ -67,9 +67,9 @@ impl<Tape: IndexableCollection> CollectionCursor<Tape> {
 	/// Moves the cursor to a new index.
 	///
 	/// It is an error to seek to a position before `0` or after `self.get_ref().len()`. In these
-	/// cases, `None` will be returned.
+	/// cases, `None` will be returned and the cursor will not be moved.
 	///
-	/// Otherwise, this will return `Some(new_pos)`=, where `new_pos` is the new position of the
+	/// Otherwise, this will return `Some(new_pos)`, where `new_pos` is the new position of the
 	/// cursor.
 	// TODO: Change to something like `Result<usize, OutOfBoundsError>`
 	pub fn seek(&mut self, pos: SeekFrom) -> Option<usize> {
@@ -86,6 +86,8 @@ impl<Tape: IndexableCollection> CollectionCursor<Tape> {
 			.inspect(|&new_pos| self.pos = new_pos)
 	}
 
+	/// Clamps the cursor to the index of the last item. If the cursor is before or at that index,
+	/// nothing will happen.
 	pub fn clamp_to_last_item(&mut self) {
 		// `usize`, by its nature, cannot be below `0`. Thus, we only need to know which is the
 		// smaller value: the collection length, or the head position
@@ -94,33 +96,53 @@ impl<Tape: IndexableCollection> CollectionCursor<Tape> {
 			.min(self.inner.len().checked_sub(1).unwrap_or_default());
 	}
 
+	/// Clamps the cursor to one index past the last item. If the cursor is before or at that index,
+	/// nothing will happen.
 	pub fn clamp_to_end(&mut self) {
 		// `usize`, by its nature, cannot be below `0`. Thus, we only need to know which is the
 		// smaller value: the collection length, or the head position
 		self.pos = self.pos.min(self.inner.len());
 	}
 
+	/// Moves the cursor to the beginning of the collection.
+	///
+	/// This is a convenience method, equivalent to `self.seek(SeekFrom::Start(0))`.
 	pub fn seek_to_start(&mut self) {
 		self.pos = 0;
 	}
 
+	/// Moves the cursor backwards one item.
+	///
+	/// This is a convenience method, equivalent to `self.seek(SeekFrom::Current(-1))`.
 	pub fn seek_backward_one(&mut self) -> bool {
 		self.seek_relative(-1).is_some()
 	}
 
+	/// Moves the cursor relative to the current position.
+	///
+	/// This is a convenience method, equivalent to `self.seek(SeekFrom::Current(offset))`.
 	// TODO: Change to something like `Result<usize, OutOfBoundsError>`
 	pub fn seek_relative(&mut self, offset: isize) -> Option<usize> {
 		self.seek(SeekFrom::Current(offset))
 	}
 
+	/// Moves the cursor forwards one item.
+	///
+	/// This is a convenience method, equivalent to `self.seek(SeekFrom::Current(1))`.
 	pub fn seek_forward_one(&mut self) -> bool {
 		self.seek_relative(1).is_some()
 	}
 
+	/// Moves the cursor to the index of the last item.
+	///
+	/// This is a convenience method, equivalent to `self.seek(SeekFrom::End(-1))`.
 	pub fn seek_to_last_item(&mut self) {
 		self.pos = self.inner.len().checked_sub(1).unwrap_or_default();
 	}
 
+	/// Moves the cursor to one index past the last item.
+	///
+	/// This is a convenience method, equivalent to `self.seek(SeekFrom::End(0))`.
 	pub fn seek_to_end(&mut self) {
 		self.pos = self.inner.len();
 	}
@@ -130,7 +152,7 @@ impl<Tape: IndexableCollection> CollectionCursor<Tape> {
 impl<Tape: IndexableCollection> CollectionCursor<Tape> {
 	/// Returns a reference to the element pointed at by the cursor.
 	///
-	/// Returns `None` if the cursor is currently out-of-bounds for one reason or another.
+	/// Returns `None` if `self.position() >= self.get_ref().len()`.
 	pub fn get_item_at_cursor(&self) -> Option<&Tape::Item> {
 		self.inner.get_item(self.pos)
 	}
@@ -154,7 +176,8 @@ impl<Tape: IndexableCollectionMut> CollectionCursor<Tape> {
 	/// Sets the slot at the cursor to `item`.
 	///
 	/// # Panics
-	/// Panics if `self.position() >= self.get_ref().len()`.
+	/// Panics if `self.position() >= self.get_ref().len()` (yes, even if it's one past the end of
+	/// the collection).
 	pub fn set_item_at_cursor(&mut self, item: Tape::Item) {
 		self.inner.set_item(self.pos, item);
 	}
