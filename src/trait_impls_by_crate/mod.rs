@@ -1,9 +1,14 @@
 macro_rules! forward_indexable {
 	() => {
+		forward_indexable!(len);
+		forward_indexable!(get_item);
+	};
+	(len) => {
 		fn len(&self) -> usize {
 			self.len()
 		}
-
+	};
+	(get_item) => {
 		fn get_item(&self, index: usize) -> Option<&Self::Item> {
 			self.get(index)
 		}
@@ -347,6 +352,9 @@ mod alloc;
 
 #[cfg(feature = "arrayvec")]
 mod arrayvec;
+
+#[cfg(feature = "generic-array")]
+mod generic_array;
 
 #[cfg(feature = "smallvec")]
 mod smallvec;
