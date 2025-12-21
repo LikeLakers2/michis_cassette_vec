@@ -63,6 +63,8 @@ impl<Tape> CollectionCursor<Tape> {
 }
 
 impl<Tape: IndexableCollection> CollectionCursor<Tape> {
+	/// Checks if the cursor is at the end of the collection (one index past the last item in the
+	/// collection).
 	pub fn is_cursor_at_end(&self) -> bool {
 		self.pos == self.inner.len()
 	}
